@@ -11,7 +11,18 @@ from keras.layers import Input, Add, Activation, Dropout, Flatten, Dense, Conv2D
 from keras.layers.normalization import BatchNormalization
 from keras.regularizers import l2
 
+from keras.optimizers import SGD
 from keras import backend as K
+
+import matplotlib.pyplot as plt  
+def show_train_history(train_history, train, validation):  
+    plt.plot(train_history.history[train])  
+    plt.plot(train_history.history[validation])  
+    plt.title('Train History')  
+    plt.ylabel(train)  
+    plt.xlabel('Epoch')  
+    plt.legend(['train', 'validation'], loc='upper left')  
+    plt.show()
 
 batch_size = 128
 nb_epoch = 350
@@ -82,20 +93,30 @@ predictions = Dense(10, activation='softmax')(x)
 
 #plot_model(model, "WRN-16-8.png", show_shapes=False)
 model = Model(inputs=inputs, outputs=predictions)
+sgd = SGD(lr=0.0, momentum=0.9, decay=0.0, nesterov=False)
 model.compile(loss="categorical_crossentropy",
-              optimizer="Adam", metrics=["acc"])
+              optimizer=sgd, metrics=["acc"])
 print("Finished compiling")
 
 #model = load_model("RetrainALLCNN_pruned_one_with_mean_L1.h5")
 model.summary()
 
 print("Model loaded.")
+def step_decay(epoch):
+    if epoch < 200:
+        return 0.25
+    elif epoch < 250:
+        return 0.1
+    elif epoch < 300:
+        return 0.05
+    else:
+        return 0.01
 
-model.fit_generator(generator.flow(trainX, trainY, batch_size=batch_size), steps_per_epoch=len(trainX) // batch_size, epochs=nb_epoch,
+train_history = model.fit_generator(generator.flow(trainX, trainY, batch_size=batch_size), steps_per_epoch=len(trainX) // batch_size, epochs=nb_epoch,
                     callbacks=[callbacks.ModelCheckpoint("./ALLCNNparameter_OG-bn.h5",
                                                          monitor="val_acc",
                                                          save_best_only=True,
-                                                         verbose=1)],
+                                                         verbose=1), callbacks.LearningRateScheduler(step_decay)],
                     validation_data=(testX, testY),
                     validation_steps=testX.shape[0] // batch_size,)
 
@@ -108,4 +129,6 @@ accuracy = metrics.accuracy_score(yTrue, yPred) * 100
 error = 100 - accuracy
 print("Accuracy : ", accuracy)
 print("Error : ", error)
+
+show_train_history(train_history,'acc','val_acc')
 # model.save('./ALLCNN_OG.h5')
